@@ -1,0 +1,35 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*.log
+.idea/
+
+# Python / caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Build output (do not ignore source directories)
+**/build/
+**/Debug/
+**/Release/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/compile_commands.json
+*.o
+*.obj
+*.elf
+*.map
+*.hex
+
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Test runtime output
+tests/output/
+tests/logs/
