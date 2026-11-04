@@ -12,6 +12,8 @@ __pycache__/
 
 # Build output (do not ignore source directories)
 **/build/
+/build-*/
+/CMakeUserPresets.json
 **/Debug/
 **/Release/
 **/CMakeFiles/

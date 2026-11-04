@@ -4,6 +4,9 @@ Personal embedded engineering project: an AI-enabled robot with smart audio and 
 
 > Status: Planning. Product vision, features, hardware, and architecture are not finalized.
 
+M0 provides a local C++17 build foundation. Audio, AI, Motion, and Orchestrator
+remain unimplemented; product planning continues in the existing documents.
+
 ## Project goals
 
 1. **Product:** Build a working, reliable system with verifiable behavior.
@@ -17,6 +20,44 @@ Personal embedded engineering project: an AI-enabled robot with smart audio and 
 3. Add features to [docs/project/backlog.md](docs/project/backlog.md).
 4. Keep a short note per work session under `docs/sessions/YYYY/`.
 5. Track essential knowledge in [docs/knowledge/index.md](docs/knowledge/index.md).
+
+## Build and test (M0)
+
+Use a Linux terminal (WSL Ubuntu on Windows) with a C++17 compiler, CMake 3.16+
+and a build tool such as Make. On Ubuntu, install the prerequisites with:
+
+```bash
+sudo apt-get update
+sudo apt-get install build-essential cmake
+```
+
+From the repository root:
+
+```bash
+bash tools/scripts/build.sh
+./build/ai_robot
+bash tools/scripts/test.sh
+```
+
+The scripts accept no arguments, work from any current directory, and use
+`build/` for a Debug build. The test script configures and builds before running
+CTest, and fails if no tests are registered. The equivalent manual commands are:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure --no-tests=error
+```
+
+The single `ai_robot_smoke` test runs the executable and requires a successful
+exit within five seconds. The executable prints `AI Robot: M0 foundation ready.`
+No test framework or external library is needed. Keep generated files in an out-of-source build directory.
+
+Future subsystem code belongs in the empty `software/src/audio/`, `ai/`,
+`motion/`, and `orchestrator/` directories. M0 adds no subsystem interfaces or
+manager classes. `tools/scripts/` holds reusable local build/test scripts;
+Raspberry Pi deployment scripts will be added when needed. M0 does not deploy
+or require access to a Raspberry Pi.
 
 ## Working rhythm
 
@@ -40,9 +81,17 @@ ai-robot/
 │   ├── decisions/           # Architecture Decision Records (ADRs)
 │   └── templates/           # Lightweight note templates
 ├── firmware/                # MCU firmware (when architecture is selected)
-├── software/                # Higher-level software (when needed)
+├── CMakeLists.txt           # C++17 executable and CTest smoke test
+├── software/
+│   └── src/
+│       ├── main.cpp         # Minimal executable entry point
+│       ├── audio/           # Future Audio subsystem
+│       ├── ai/              # Future AI subsystem
+│       ├── motion/          # Future Motion subsystem
+│       └── orchestrator/    # Future integration, when needed
 ├── hardware/                # Schematics / hardware designs (when needed)
 ├── tests/                   # Integration and test utilities (when needed)
+├── tools/scripts/           # Build/test scripts; future deployment tooling
 └── .agents/                 # AI-agent workflows and reusable skills (when needed)
 ```
 
