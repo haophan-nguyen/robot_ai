@@ -1,0 +1,100 @@
+@startuml
+title F001 WAV playback — current implementation
+start
+partition "CLI — main()" {
+    if (Exactly --device PCM and path, both nonempty?) then (yes)
+        :Call play_wav_file(path, pcm_device);
+    else (no)
+        :Print usage to stderr and return 2;
+        stop
+    endif
+}
+
+partition "Playback module — play_wav_file()" {
+    if (PCM name empty?) then (yes)
+        :Return open PCM diagnostic;
+        :CLI prints diagnostic and returns 1;
+        stop
+    endif
+    :Check regular file and open with sf_open;
+    if (File check or open failed?) then (yes)
+        :Return open WAV diagnostic;
+        :CLI prints diagnostic and returns 1;
+        stop
+    endif
+    :validate_wav_format(info) checks little-endian
+    RIFF/WAVE PCM16, channels, rate and frame count;
+    if (Validation failed?) then (yes)
+        :Release WAV handle;
+        :CLI prints validation diagnostic and returns 1;
+        stop
+    endif
+    :snd_pcm_open selects the caller's ALSA PCM
+    in blocking playback mode;
+    if (PCM open failed?) then (yes)
+        :Release WAV handle;
+        :CLI prints open PCM diagnostic and returns 1;
+        stop
+    endif
+    :snd_pcm_set_params requests interleaved native-endian S16,
+    source rate and channels, and 200 ms latency;
+    if (PCM configuration failed?) then (yes)
+        :Release PCM and WAV handles;
+        :CLI prints configure PCM diagnostic and returns 1;
+        stop
+    endif
+
+    :snd_pcm_get_params reads the negotiated period;
+    if (Query failed or period is zero?) then (yes)
+        :Release PCM and WAV handles;
+        :CLI prints read PCM parameters diagnostic and returns 1;
+        stop
+    endif
+
+    partition "transfer_frames()" {
+        while (Unread frames?) is (yes)
+            :sf_readf_short decodes up to 1024 frames
+            into the interleaved sample buffer;
+            if (Decoder error or short read?) then (yes)
+                :Return read WAV diagnostic to play_wav_file;
+                :Attempt PCM drop and release handles;
+                :CLI prints diagnostic and returns 1;
+                stop
+            endif
+            :write_frames submits the block via snd_pcm_writei,
+            advancing by frames written times channels;
+            if (Negative write or zero progress?) then (yes)
+                :Return write PCM diagnostic to play_wav_file;
+                :Attempt PCM drop and release handles;
+                :CLI prints diagnostic and returns 1;
+                stop
+            endif
+            :Subtract decoded frames from unread count;
+        endwhile (no)
+        :Calculate frames to align the WAV length to a period boundary
+        and add one full negotiated period;
+        :Clear the reusable sample buffer;
+        while (Silent frames pending?) is (yes)
+            :write_frames submits a bounded block of silence
+            using the same partial-write handling as WAV samples;
+            if (Silent write failed?) then (yes)
+                :Return write PCM diagnostic to play_wav_file;
+                :Attempt PCM drop and release handles;
+                :CLI prints diagnostic and returns 1;
+                stop
+            endif
+            :Subtract the submitted silent frames;
+        endwhile (no)
+    }
+
+    :snd_pcm_drain waits for pending playback;
+    if (Drain failed?) then (yes)
+        :Attempt PCM drop and release handles;
+        :CLI prints drain PCM diagnostic and returns 1;
+        stop
+    endif
+    :Release PCM and WAV handles and return success;
+}
+:CLI returns 0;
+stop
+@enduml

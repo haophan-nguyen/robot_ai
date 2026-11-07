@@ -2,6 +2,8 @@
 
 **Phase 1 — Requirement & Design · APPROVED · 2026-11-07**
 
+[Feature overview](overview.md)
+
 ## 0. Project Context & Vision
 
 The long-term goal is a Conversational AI Robot that understands context and can act. The first MVP is a Voice Command Robot. F001 gives the Audio subsystem a way to play prerecorded prompts and acknowledgments. Audio Capture will provide input, AI may later generate speech, and the Robot Orchestrator can eventually decide when to play a response. The session notes describe those subsystem boundaries and the plan to build subsystems before integrating them. Source: local session note `2026-11-03.md`.
@@ -22,8 +24,8 @@ Scope covers one blocking playback call using the Pi's existing audio setup. Oth
 
 | Label | Evidence or gap | Effect on F001 |
 | --- | --- | --- |
-| VERIFIED | M0 has one C++17 executable and one CTest smoke test. The Audio source directory held a placeholder at inspection. [CMake](../../CMakeLists.txt) · [Entry point](../../software/src/main.cpp) · [M0 evidence](../sessions/2026/2026-11-04.md) | F001 supplies the first audio entry point. |
-| VERIFIED | The vision, roadmap, and backlog are drafts. The 2026-11-03 session note records the subsystem split and native Pi build direction. The current Engineer brief establishes F001 Playback as the active feature. [Vision](../project/vision.md) · [Roadmap](../project/roadmap.md) · [Backlog](../project/backlog.md) | Use the current brief for scope and the session note for architecture context. |
+| VERIFIED | M0 has one C++17 executable and one CTest smoke test. The Audio source directory held a placeholder at inspection. [CMake](../../../CMakeLists.txt) · [Entry point](../../../software/src/main.cpp) · [M0 evidence](../../sessions/2026/2026-11-04.md) | F001 supplies the first audio entry point. |
+| VERIFIED | The vision, roadmap, and backlog are drafts. The 2026-11-03 session note records the subsystem split and native Pi build direction. The current Engineer brief establishes F001 Playback as the active feature. [Vision](../../project/vision.md) · [Roadmap](../../project/roadmap.md) · [Backlog](../../project/backlog.md) | Use the current brief for scope and the session note for architecture context. |
 | VERIFIED | The Pi has `alsa-utils` and `libasound2` at `1.2.8-1+rpt1`, `libsndfile1` at `1.2.0-1+deb12u1`, and `pkg-config` at `1.8.1-1`. `dpkg-query` found neither `libasound2-dev` nor `libsndfile1-dev`. | The development packages are prerequisites for a future native build. |
 | UNKNOWN | The other three source channel/rate combinations and playback through the F001 application have no target results. | Track these in application verification. The completed baseline covers only the tested 48 kHz mono source. |
 | DEFERRED | Capture/playback duplex behavior, TTS format and streaming needs, and orchestration scheduling. | Revisit when the caller and concurrency requirements exist. |
@@ -76,7 +78,7 @@ Keep the playback function callable outside the CLI so a future TTS caller can p
 
 ## 4. Execution Plan
 
-Task 1 prepared a Bookworm armhf sysroot with matching ALSA and libsndfile development packages. Task 2 verified the shared ARM build path with the M0 executable. [Project ARM cross-compilation guide](../project/arm-cross-compilation.md)
+Task 1 prepared a Bookworm armhf sysroot with matching ALSA and libsndfile development packages. Task 2 verified the shared ARM build path with the M0 executable. [Project ARM cross-compilation guide](../../project/arm-cross-compilation.md)
 
 1. After explicit authorization to start Phase 2, add the Linux-only CMake option `AI_ROBOT_ENABLE_AUDIO_PLAYBACK` (default OFF) and the `ai_robot_play_wav` target. Discover `ALSA::ALSA` through `FindALSA` and the `sndfile` imported module target through `FindPkgConfig` only when playback is enabled. Debian-family build prerequisites include `libasound2-dev`, `libsndfile1-dev`, and `pkg-config`. Confirm the build environment's package availability before installation. [CMake 3.16 FindALSA](https://cmake.org/cmake/help/v3.16/module/FindALSA.html) · [CMake 3.16 FindPkgConfig](https://cmake.org/cmake/help/v3.16/module/FindPkgConfig.html)
 2. Implement the centralized file validation, blocking PCM transfer, scoped cleanup, and CLI. Add reproducible WAV fixtures and tests for the approved formats and expected failures.
@@ -86,7 +88,7 @@ Task 1 prepared a Bookworm armhf sysroot with matching ALSA and libsndfile devel
 
 | D4 verification level | Coverage and acceptance |
 | --- | --- |
-| 1. Software verification · Pending | **R1–R4.** Use `--device null` for all four channel/rate combinations, including a file spanning several reads with a partial final block. Expect exit 0 after frame transfer and drain. Cover missing or unreadable files, invalid headers, empty WAVs, unsupported encodings, rates and channel counts, missing CLI arguments, and an invalid PCM. Expect the corresponding nonzero exit and diagnostic. Pair unsupported files with an invalid PCM to verify that format validation comes first. Review partial-write handling and cleanup on stream failures. **R5.** Build and run the M0 smoke test with playback OFF in an environment without audio development dependencies. With playback ON and dependencies present, build the new CLI and run its focused tests. [ALSA null plugin](https://www.alsa-project.org/alsa-doc/alsa-lib/pcm_plugins.html) |
+| 1. Software verification · [Phase 2 results](phase2-implementation-build.md#4-tests) | **R1–R4.** Use `--device null` for all four channel/rate combinations, including a file spanning several reads with a partial final block. Expect exit 0 after frame transfer and drain. Cover missing or unreadable files, invalid headers, empty WAVs, unsupported encodings, rates and channel counts, missing CLI arguments, and an invalid PCM. Expect the corresponding nonzero exit and diagnostic. Pair unsupported files with an invalid PCM to verify that format validation comes first. Review partial-write handling and cleanup on stream failures. **R5.** Build and run the M0 smoke test with playback OFF in an environment without audio development dependencies. With playback ON and dependencies present, build the new CLI and run its focused tests. [ALSA null plugin](https://www.alsa-project.org/alsa-doc/alsa-lib/pcm_plugins.html) |
 | 2. Hardware baseline · PASS for the tested fixture | **R1.** The independent `aplay` preflight routed 48 kHz mono PCM through the WM8960. The Engineer heard the clip. The exact `aplay` exit code was unavailable. See [Hardware preflight](#hardware-preflight). |
 | 3. Application verification · Pending | **R1–R4.** Run the F001 executable on the Pi with the verified PCM and short clips for all four channel/rate combinations. Record the command, PCM, fixture metadata, exit status, and the Engineer's listening result. Acceptance requires exit 0 and Engineer confirmation that each clip is audible through the WM8960, at expected speed and with its end marker intact. Check the output can be reopened on successive runs. |
 
@@ -105,6 +107,6 @@ The Engineer approved D1–D4 on 2026-11-07.
 | D3 · WAV scope | One file at a time, blocking playback. Signed 16-bit PCM only, mono or stereo, 44.1 or 48 kHz. Centralize format validation and use numeric parameters for sample rate and channel count. |
 | D4 · Acceptance | Verify software behavior with ALSA `null` and negative cases. Establish the WM8960 hardware baseline with `aplay`. Verify the application separately on WM8960 and require the Engineer's audible confirmation in addition to the application's result. |
 
-**Phase 1 APPROVED.** There are no unresolved critical design blockers. Development headers are a future native build prerequisite. Software and application verification remain pending.
+**Phase 1 APPROVED.** There are no unresolved critical design blockers. Development headers are a future native build prerequisite. The [Phase 2 report](phase2-implementation-build.md) records software verification separately from application verification on the Pi.
 
-**Next action.** Await the Engineer's separate, explicit authorization to start Phase 2. See the local feature-workflow skill and its Phase 1 reference.
+The Engineer subsequently authorized Phase 2. See the [implementation and build report](phase2-implementation-build.md).
