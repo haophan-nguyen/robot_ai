@@ -55,9 +55,9 @@ No test framework or external library is needed. Keep generated files in an out-
 
 Future subsystem code belongs in the empty `software/src/audio/`, `ai/`,
 `motion/`, and `orchestrator/` directories. M0 adds no subsystem interfaces or
-manager classes. `tools/scripts/` holds reusable local build/test scripts;
-Raspberry Pi deployment scripts will be added when needed. M0 does not deploy
-or require access to a Raspberry Pi.
+manager classes. For Raspberry Pi builds, see the
+[ARM cross-compilation guide](docs/project/arm-cross-compilation.md) for toolchain
+setup, ELF inspection, and deployment dry runs.
 
 ## Working rhythm
 
