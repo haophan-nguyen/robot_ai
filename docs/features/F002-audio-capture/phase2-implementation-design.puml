@@ -1,0 +1,52 @@
+@startuml
+title F002 Audio Capture implementation
+actor Caller
+participant "CLI\nmain" as CLI
+participant "Audio API\nrecord_wav_file" as Capture
+participant StagedWav as Stage
+participant "ALSA capture PCM" as ALSA
+participant libsndfile as WAV
+database "Destination WAV" as File
+
+Caller -> CLI : --device <alsa-pcm> <path.wav>
+alt Invalid CLI arguments
+    CLI --> Caller : exit 2 with usage
+else Valid CLI arguments
+    CLI -> Capture : record_wav_file(path, pcm_device)
+    Capture -> Capture : validate device and fresh destination
+    Capture -> Stage : create a private temporary sibling
+    Capture -> WAV : sf_open_fd in write mode\nRIFF/WAVE PCM16 mono at 48 kHz
+    Capture -> ALSA : open blocking capture, set exact format,\nquery negotiated period
+    break Setup error
+        Capture -> Stage : scoped cleanup
+        Capture --> CLI : stage diagnostic
+        CLI --> Caller : exit 1
+    end
+    loop transfer_frames while frames remain
+        Capture -> ALSA : snd_pcm_readi(up to period or remaining)
+        ALSA --> Capture : actual PCM16 frames
+        Capture -> WAV : sf_writef_short(actual frames)
+        Capture -> Capture : subtract written frames from budget
+        break Read or write error
+            Capture -> ALSA : release PCM
+            Capture -> WAV : release writer
+            Capture -> Stage : remove temporary output
+            Capture --> CLI : stage diagnostic
+            CLI --> Caller : exit 1
+        end
+    end
+    Capture -> ALSA : snd_pcm_drop and close
+    Capture -> WAV : close writer and finalize header
+    Capture -> WAV : verify_finalized_wav(fd, path)\nread back format and 240,000 frames
+    Capture -> Stage : close descriptor, publish(path)
+    alt Finalization or publication error
+        Capture -> Stage : scoped cleanup
+        Capture --> CLI : stage diagnostic
+        CLI --> Caller : exit 1
+    else Finalized and published
+        Stage -> File : atomic rename with RENAME_NOREPLACE
+        Capture --> CLI : success
+        CLI --> Caller : exit 0
+    end
+end
+@enduml
