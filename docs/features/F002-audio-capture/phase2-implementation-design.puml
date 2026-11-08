@@ -12,6 +12,10 @@ Caller -> CLI : --device <alsa-pcm> <path.wav>
 alt Invalid CLI arguments
     CLI --> Caller : exit 2 with usage
 else Valid CLI arguments
+    CLI -> CLI : install SIG_IGN for SIGXFSZ using sigaction
+    break Signal setup error
+        CLI --> Caller : exit 1 with configure SIGXFSZ diagnostic
+    end
     CLI -> Capture : record_wav_file(path, pcm_device)
     Capture -> Capture : validate device and fresh destination
     Capture -> Stage : create a private temporary sibling

@@ -14,6 +14,10 @@ The approved Phase 2 baseline is Git commit `c0bd8fcf85abb85eb709aa4d504ecf2e563
 | F001 player | `/home/mypi/ai-robot-f001-phase3.rNCIWFvu/ai_robot_play_wav-chunk-e60ebc2c06b0`. The existing Pi copy matched the F001 verification SHA-256 `e60ebc2c06b0f52616ebb0405ced47e9467c1e050ab52ea7d2a37218c332dbc4`. [F001 target verification](../F001-audio-playback/phase4-verification-report.md#mvp-02--raspberry-pi--wm8960-listening--pass) |
 | Start cue | Installed `/usr/share/sounds/alsa/Front_Center.wav`, SHA-256 `0d61518bcd3f13b0c709a5298e939caf698b80d31d71d50475365ee0e5536cc9`, matching the previously verified F001 fixture. |
 
+### Later CLI correction
+
+Commit `dd5f894` addressed F002-4A-01 by ignoring `SIGXFSZ` in the recorder CLI so the existing WAV error and cleanup paths can run. The corrected ARM artifact has SHA-256 `050b265b1eeb30b0112dc5027c9a91b90bd65f3c8ab5c60b76f9ea72895b8945`. The correction passed host G03 and static ARM checks. The Raspberry Pi recording and F001 replay below used the original Phase 2 binary identified above. Pi runtime verification of the corrected artifact remains pending. [Phase 4 retest](phase4-verification-report.md#retest-of-the-updated-recorder-cli--2026-11-08)
+
 ## 2. Deployment
 
 **PASS.** The existing deploy script previewed the destination, then transferred the recorder using SCP with host-key checking. Transfer returned 0. The Pi copy was 23,980 bytes, mode `755`, owned by `mypi`, and executable. Its digest matched the approved local artifact. The recording path was absent before the run. [Deploy script](../../../tools/scripts/deploy.sh) · [Transfer and hash evidence](../../../build-f002-phase3/target-evidence.log)
@@ -55,4 +59,4 @@ The Pi retained the WAV and per-stage `.stdout` and `.stderr` files in `/home/my
 
 **APPROVED / PASS.** The Engineer approved Phase 3 on 2026-11-08 after deployment, recording, WAV checks, F001 replay, and listening met the target smoke criteria. The run exercised one capture and replay on the approved route. Independent verification belongs to Phase 4.
 
-Next Engineer action. Authorize Phase 4A when ready.
+The Engineer subsequently approved Phase 4 after the independent verification and CLI retest. [Phase 4 assessment](phase4-verification-report.md#6-final-assessment--handoff)
