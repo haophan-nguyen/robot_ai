@@ -1,8 +1,8 @@
 # F002 — Audio Capture
 
-F002 adds the microphone input path for the Voice Command Robot. The Audio subsystem will capture one five-second recording on the Raspberry Pi through its WM8960 and save a mono 48 kHz PCM16 WAV. F001 will play the recording for Engineer acceptance. The capture loop gives later speech recognition work a place to consume PCM frames.
+F002 adds the microphone input path for the Voice Command Robot. The Audio subsystem captures one five-second recording on the Raspberry Pi through its WM8960 and saves a mono 48 kHz PCM16 WAV. F001 replays the recording for Engineer acceptance. The capture loop gives later speech recognition work a place to consume PCM frames.
 
-**Phase 4 — Independent Verification & Review** is **APPROVED / PASS**. The Engineer accepted the result after the CLI fix for F002-4A-01 passed the original G03 check and host regressions.
+**Phase 5 — Technical Handover & Engineering Mastery** is **READY FOR ENGINEER REVIEW**. Phase 4 product verification is **APPROVED / PASS**. F002 remains open pending Engineer review and explicit closure approval.
 
 | Phase | Status | Documentation |
 | --- | --- | --- |
@@ -10,6 +10,6 @@ F002 adds the microphone input path for the Voice Command Robot. The Audio subsy
 | 2 — Implementation & Build | APPROVED / PASS | [Phase 2 report](phase2-implementation-build.md) · [Implementation diagram](phase2-implementation-design.puml) |
 | 3 — Execution & Debug | APPROVED / PASS | [Phase 3 report](phase3-execution-debug.md) |
 | 4 — Independent Verification & Review | APPROVED / PASS | [Phase 4 report](phase4-verification-report.md) |
-| 5 — Technical Handover & Engineering Mastery | Pending Engineer authorization | — |
+| 5 — Technical Handover & Engineering Mastery | READY FOR ENGINEER REVIEW | [Technical handover](technical-handover.md) · [Phase 5 report and questions](phase5-engineering-mastery.md) |
 
-Next Engineer action. Authorize Phase 5 when ready.
+Next Engineer action. Answer the five knowledge-check questions in your own words.
