@@ -46,8 +46,34 @@ def verify_valid(executable, directory):
             make_wav(path, channels=channels, rate=rate)
             expect(executable, ["--device", "null", path], 0)
 
-    with wave.open(str(directory / "pcm16-48000-2.wav"), "rb") as stereo:
-        data = stereo.readframes(stereo.getnframes())
+    bytes_per_frame = struct.calcsize("hh")
+
+    def capture(wav_path):
+        # The file PCM records every frame that the player submits to the null sink.
+        raw_path = wav_path.with_suffix(".raw")
+        expect(executable, ["--device", f"file:{raw_path}", wav_path], 0)
+        return raw_path.read_bytes()
+
+    def native_endian(data):
+        return struct.pack(f"={len(data) // 2}h", *struct.unpack(f"<{len(data) // 2}h", data))
+
+    short_path = directory / "one-frame.wav"
+    short_audio = native_endian(make_wav(short_path, channels=2, frames=1))
+    short_capture = capture(short_path)
+    if not short_capture.startswith(short_audio) or any(short_capture[len(short_audio):]):
+        raise RuntimeError("one-frame WAV was not preserved and padded with silence")
+    chunk_frames, leftover = divmod(len(short_capture), bytes_per_frame)
+    if chunk_frames < 2 or leftover:
+        raise RuntimeError("file sink did not capture a complete playback chunk")
+
+    aligned = directory / "aligned.wav"
+    data = make_wav(aligned, channels=2, frames=2 * chunk_frames)
+    if capture(aligned) != native_endian(data):
+        raise RuntimeError("period-aligned audio changed or gained an extra silent chunk")
+    print(f"PASS {2 * chunk_frames} aligned frames with no padding")
+
+    partial = directory / "partial.wav"
+    data = make_wav(partial, channels=2, frames=2 * chunk_frames + 1)
 
     # RIFF/WAVE can describe PCM16 via the WAVE_FORMAT_EXTENSIBLE header.
     pcm_guid = bytes.fromhex("0100000000001000800000aa00389b71")
@@ -58,20 +84,10 @@ def verify_valid(executable, directory):
     extensible = directory / "stereo.data"
     extensible.write_bytes(b"RIFF" + struct.pack("<I", len(chunks)) + chunks)
 
-    # ALSA's file PCM forwards to null and records the data submitted by the CLI.
-    recorded = directory / "stereo.raw"
-    expect(executable, ["--device", f"file:{recorded}", extensible], 0)
-    expected = data
-    if sys.byteorder == "big":
-        expected = struct.pack(f">{len(data) // 2}h", *struct.unpack(f"<{len(data) // 2}h", data))
-    captured = recorded.read_bytes()
-    if not captured.startswith(expected):
-        raise RuntimeError("ALSA file sink did not receive all stereo samples in order")
-    tail = captured[len(expected):]
-    bytes_per_frame = struct.calcsize("hh")
-    if not tail or len(tail) % bytes_per_frame or any(tail):
-        raise RuntimeError("ALSA file sink did not receive a tail of complete silent frames")
-    print(f"PASS byte-exact stereo audio followed by {len(tail) // bytes_per_frame} silent frames")
+    expected = native_endian(data) + bytes((chunk_frames - 1) * bytes_per_frame)
+    if capture(extensible) != expected:
+        raise RuntimeError("partial chunk was not preserved and padded to exactly one period")
+    print(f"PASS byte-exact stereo audio followed by {chunk_frames - 1} silent frames")
 
 
 def verify_invalid(executable, directory):

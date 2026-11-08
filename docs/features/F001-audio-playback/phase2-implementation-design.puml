@@ -52,8 +52,17 @@ partition "Playback module — play_wav_file()" {
     endif
 
     partition "transfer_frames()" {
-        while (Unread frames?) is (yes)
-            :sf_readf_short decodes up to 1024 frames
+        :Use the negotiated period as the chunk size;
+        :Validate the sample count and allocate
+        one reusable period buffer;
+        if (Period too large or allocation failed?) then (yes)
+            :Return PCM parameter or allocation diagnostic;
+            :Attempt PCM drop and release handles;
+            :CLI prints diagnostic and returns 1;
+            stop
+        endif
+        while (Unread WAV frames?) is (yes)
+            :sf_readf_short reads up to one period
             into the interleaved sample buffer;
             if (Decoder error or short read?) then (yes)
                 :Return read WAV diagnostic to play_wav_file;
@@ -61,7 +70,11 @@ partition "Playback module — play_wav_file()" {
                 :CLI prints diagnostic and returns 1;
                 stop
             endif
-            :write_frames submits the block via snd_pcm_writei,
+            if (Final chunk is incomplete?) then (yes)
+                :Zero-fill only the unused frames
+                in this period;
+            endif
+            :write_frames submits one complete period,
             advancing by frames written times channels;
             if (Negative write or zero progress?) then (yes)
                 :Return write PCM diagnostic to play_wav_file;
@@ -69,25 +82,11 @@ partition "Playback module — play_wav_file()" {
                 :CLI prints diagnostic and returns 1;
                 stop
             endif
-            :Subtract decoded frames from unread count;
-        endwhile (no)
-        :Calculate frames to align the WAV length to a period boundary
-        and add one full negotiated period;
-        :Clear the reusable sample buffer;
-        while (Silent frames pending?) is (yes)
-            :write_frames submits a bounded block of silence
-            using the same partial-write handling as WAV samples;
-            if (Silent write failed?) then (yes)
-                :Return write PCM diagnostic to play_wav_file;
-                :Attempt PCM drop and release handles;
-                :CLI prints diagnostic and returns 1;
-                stop
-            endif
-            :Subtract the submitted silent frames;
+            :Subtract the decoded WAV frames from unread count;
         endwhile (no)
     }
 
-    :snd_pcm_drain waits for pending playback;
+    :snd_pcm_drain waits after the last submitted chunk;
     if (Drain failed?) then (yes)
         :Attempt PCM drop and release handles;
         :CLI prints drain PCM diagnostic and returns 1;

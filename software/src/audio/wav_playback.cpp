@@ -4,11 +4,12 @@
 #include <sndfile.h>
 
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <new>
 #include <system_error>
+#include <vector>
 
 namespace ai_robot::audio {
 namespace {
@@ -16,7 +17,6 @@ namespace {
 using WavHandle = std::unique_ptr<SNDFILE, decltype(&sf_close)>;
 using PcmHandle = std::unique_ptr<snd_pcm_t, decltype(&snd_pcm_close)>;
 
-constexpr sf_count_t frames_per_block = 1024;
 constexpr int max_channels = 2;
 constexpr unsigned int pcm_latency_us = 200'000;
 
@@ -69,10 +69,22 @@ PlaybackResult transfer_frames(SNDFILE* wav, const SF_INFO& info, const std::str
                                snd_pcm_t* pcm, const std::string& device,
                                snd_pcm_uframes_t period_frames)
 {
-    std::array<short, frames_per_block * max_channels> samples;
+    const auto channels = static_cast<std::size_t>(info.channels);
+    std::vector<short> samples;
+    if (period_frames > static_cast<std::uintmax_t>(std::numeric_limits<sf_count_t>::max()) ||
+        period_frames > samples.max_size() / channels) {
+        return failure("read PCM parameters", device, "negotiated period is too large");
+    }
+    const auto chunk_frames = static_cast<sf_count_t>(period_frames);
+    try {
+        samples.resize(static_cast<std::size_t>(period_frames) * channels);
+    } catch (const std::bad_alloc&) {
+        return failure("allocate PCM chunk", device, "insufficient memory for negotiated period");
+    }
+
     sf_count_t unread = info.frames;
     while (unread > 0) {
-        const sf_count_t requested = std::min(unread, frames_per_block);
+        const sf_count_t requested = std::min(unread, chunk_frames);
         const sf_count_t decoded = sf_readf_short(wav, samples.data(), requested);
         if (sf_error(wav) != SF_ERR_NO_ERROR) {
             return failure("read WAV", path, sf_strerror(wav));
@@ -81,26 +93,16 @@ PlaybackResult transfer_frames(SNDFILE* wav, const SF_INFO& info, const std::str
             return failure("read WAV", path, "unexpected end of audio data");
         }
 
-        auto result = write_frames(pcm, device, samples.data(),
-                                   static_cast<snd_pcm_uframes_t>(decoded), info.channels);
+        if (decoded < chunk_frames) {
+            // Only the unwritten part of the final period needs silence.
+            const auto decoded_samples = static_cast<std::size_t>(decoded) * channels;
+            std::fill(samples.data() + decoded_samples, samples.data() + samples.size(), 0);
+        }
+        auto result = write_frames(pcm, device, samples.data(), period_frames, info.channels);
         if (!result) {
             return result;
         }
         unread -= decoded;
-    }
-
-    // Finish on a period boundary with at least one silent period before drain.
-    const auto remainder = static_cast<std::uintmax_t>(info.frames) % period_frames;
-    auto silence_frames = period_frames + (period_frames - remainder) % period_frames;
-    samples.fill(0);
-    while (silence_frames > 0) {
-        const auto block = std::min<std::uintmax_t>(silence_frames, frames_per_block);
-        auto result = write_frames(pcm, device, samples.data(),
-                                   static_cast<snd_pcm_uframes_t>(block), info.channels);
-        if (!result) {
-            return result;
-        }
-        silence_frames -= block;
     }
     return {};
 }

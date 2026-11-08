@@ -107,6 +107,10 @@ The Engineer approved D1–D4 on 2026-11-07.
 | D3 · WAV scope | One file at a time, blocking playback. Signed 16-bit PCM only, mono or stereo, 44.1 or 48 kHz. Centralize format validation and use numeric parameters for sample rate and channel count. |
 | D4 · Acceptance | Verify software behavior with ALSA `null` and negative cases. Establish the WM8960 hardware baseline with `aplay`. Verify the application separately on WM8960 and require the Engineer's audible confirmation in addition to the application's result. |
 
+### Approved final-chunk decision
+
+On 2026-11-08 the Engineer approved Phase 3 after the [final-chunk experiment](phase3-execution-debug.md#negotiated-period-chunk-experiment). Use the PCM's negotiated ALSA period as the chunk size. Pad an incomplete final chunk with `(chunk_size - (wav_frames % chunk_size)) % chunk_size` silent frames, then drain. This supersedes the intermediate workaround that appended another full silent period. The approved WAV formats, PCM selection, and acceptance criteria in D1–D4 still apply.
+
 **Phase 1 APPROVED.** There are no unresolved critical design blockers. Development headers are a future native build prerequisite. The [Phase 2 report](phase2-implementation-build.md) records software verification separately from application verification on the Pi.
 
 The Engineer subsequently authorized Phase 2. See the [implementation and build report](phase2-implementation-build.md).

@@ -36,7 +36,7 @@ bash tools/scripts/deploy.sh --execute build-armhf/ai_robot_play_wav \
 
 **Bug:** On the original player, the last “-ter” in the installed “Front Center” clip was clipped or stuttered through the WM8960. It reproduced with the same WAV and PCM while the process returned exit 0. The Engineer heard a clean ending with `aplay`.
 
-**Fix and status:** F001 now calculates a silent tail from the negotiated ALSA period before draining. The Engineer confirmed a clean ending on the original, unmodified WAV after the rebuild. This mitigates the reported case. The exact cause of the original artifact remains unverified. [Implementation and retest](#approved-application-change-and-original-fixture-retest)
+**Fix and status:** The approved player uses the negotiated ALSA period as the chunk size and pads only an incomplete final chunk. The Engineer confirmed clean playback of the original WAV. The underlying cause of the original artifact remains unverified. [Approved experiment and retest](#negotiated-period-chunk-experiment)
 
 - **ENGINEER_PROVIDED:** The final “-ter” was clipped or stuttered during F001 playback. The Engineer heard a clean ending with [the Phase 1 `aplay` baseline](phase1-requirement-design.md#hardware-preflight), which used the same WAV and PCM.
 - **VERIFIED:** F001 exited `0` with empty stdout and stderr. Those process results do not explain the audible artifact.
@@ -84,9 +84,9 @@ Both runs selected `plughw:CARD=wm8960soundcard,DEV=0` and negotiated the same h
 
 #### Approved application change and original-fixture retest
 
-The Engineer authorized moving the successful fixture padding into F001 and replaying the original WAV. The application queries the negotiated ALSA period with `snd_pcm_get_params`. After submitting every decoded frame, it writes enough silent frames to reach a period boundary with at least one full period of silence, then drains. The same bounded sample buffer and partial-write handling serve both audio and silence. A failed period query or zero period returns a diagnostic. [ALSA PCM API](https://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
+The Engineer authorized an intermediate implementation of the successful fixture padding. That version queried the negotiated ALSA period with `snd_pcm_get_params`, submitted every decoded frame, then wrote enough silence to reach a period boundary plus one full silent period before draining. It shared the bounded sample buffer and partial-write handling between audio and silence. A failed period query or zero period returns a diagnostic. [ALSA PCM API](https://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html)
 
-The application calculates the silent tail as `period + (period - (wav_frames % period)) % period`, where `period` is the negotiated frame count. For the original fixture, 68,545 WAV frames leave 1,345 frames in the final partial period. The player adds 1,055 frames to reach the boundary and one more silent period of 2,400 frames. It then drains after submitting 72,000 total frames. The calculation uses the PCM settings at runtime. [Playback source](../../../software/src/audio/wav_playback.cpp#L68)
+The intermediate implementation calculated the silent tail as `period + (period - (wav_frames % period)) % period`, where `period` is the negotiated frame count. For the original fixture, 68,545 WAV frames leave 1,345 frames in the final partial period. The player adds 1,055 frames to reach the boundary and one more silent period of 2,400 frames. It then drains after submitting 72,000 total frames. The calculation uses the PCM settings at runtime. This working version is preserved in commit `19727c2`.
 
 ```bash
 sysroot="$HOME/.local/share/robot-ai/toolchains/raspbian-bookworm-armhf/sysroot"
@@ -109,8 +109,35 @@ bash tools/scripts/deploy.sh --execute build-armhf-f001-tail/ai_robot_play_wav \
 
 **Outcome:** The period-derived padding mitigated the reported clipping on the original fixture. The underlying cause has not been isolated, and this run establishes playback quality for the original 48 kHz mono fixture only.
 
+#### Negotiated-period chunk experiment
+
+The Engineer authorized testing final-chunk padding separately from the extra full period. F001 was rebuilt to read and submit one negotiated period per chunk, zero-fill only the final incomplete chunk, and drain after the last submission. The previous working source and binary were preserved. [Current transfer loop](../../../software/src/audio/wav_playback.cpp#L68)
+
+```bash
+sysroot="$HOME/.local/share/robot-ai/toolchains/raspbian-bookworm-armhf/sysroot"
+bash tools/scripts/build-armhf.sh --sysroot "$sysroot" --build-dir build-armhf-f001-chunk \
+    --target ai_robot_play_wav -- -DAI_ROBOT_ENABLE_AUDIO_PLAYBACK=ON
+bash tools/scripts/deploy.sh --execute build-armhf-f001-chunk/ai_robot_play_wav \
+    mypi@10.10.10.2 /home/mypi/ai-robot-f001-phase3.rNCIWFvu/ai_robot_play_wav-chunk-e60ebc2c06b0
+# On the Pi:
+/home/mypi/ai-robot-f001-phase3.rNCIWFvu/ai_robot_play_wav-chunk-e60ebc2c06b0 \
+    --device plughw:CARD=wm8960soundcard,DEV=0 /usr/share/sounds/alsa/Front_Center.wav
+```
+
+- **Build and deployment:** ARMv7 ELF32, EABI5 hard-float, loader `/lib/ld-linux-armhf.so.3`. Transfer exited `0`. The deployed binary matched SHA-256 `e60ebc2c06b0f52616ebb0405ced47e9467c1e050ab52ea7d2a37218c332dbc4`.
+- **Host checks:** CTest passed 3/3. The file sink recorded 4,800 aligned frames without extra silence and 4,801 original frames followed by exactly 2,399 silent frames for an incomplete chunk.
+- **Target conditions:** The original WAV matched its recorded SHA-256 and contained 68,545 mono PCM16 frames at 48 kHz. The WM8960 PCM negotiated a 2,400-frame period and a 9,600-frame buffer. The last sampled drain status was `appl_ptr=69600`, `hw_ptr=68892`, `delay=708`. The app exited `0` with empty stdout and stderr. The Engineer confirmed the ending was clean.
+
+| F001 version on the original WAV | Silent frames submitted | Total submitted frames | Engineer listening result |
+| --- | ---: | ---: | --- |
+| Original playback | 0 | 68,545 | Final “-ter” clipped or stuttered |
+| Intermediate workaround with one extra period | 3,455 | 72,000 | Clean |
+| Approved final-chunk padding | 1,055 | 69,600 | Clean |
+
+For this fixture, the final chunk holds 1,345 WAV frames and needs 1,055 silent frames. This run shows that the extra full silent period was unnecessary on the tested PCM for this clip. The exact cause and wider target coverage remain open.
+
 ## Outcome and handoff
 
-**Target smoke PASS with the rebuilt binary · Phase 3 READY FOR REVIEW.** The Engineer confirmed clean playback of the original 48 kHz mono WAV after the approved mitigation. The full target format matrix remains for Phase 4.
+**Target smoke PASS · Phase 3 APPROVED on 2026-11-08.** The Engineer accepted the final-chunk result for the original 48 kHz mono WAV. The full target format matrix remains for Phase 4.
 
-**Next action.** Engineer review of the Phase 3 fix and retest before separately authorizing Phase 4.
+**Next action.** Await separate Engineer authorization to start Phase 4.
